@@ -1,0 +1,40 @@
+[package]
+name = "polymarket-bot"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.88"
+
+[dependencies]
+polymarket-client-sdk = { git = "https://github.com/Polymarket/rs-clob-client.git", features = ["clob", "tracing"] }
+tokio = { version = "1.49", features = ["full"] }
+tokio-util = "0.7"
+sqlx = { version = "0.8", features = ["postgres", "chrono", "uuid", "runtime-tokio-native-tls"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
+tracing-appender = "0.2"
+dotenv = "0.15"
+chrono = { version = "0.4", features = ["serde"] }
+rust_decimal = { version = "1.40", features = ["serde"] }
+uuid = { version = "1.0", features = ["v4", "serde"] }
+thiserror = "1.0"
+async-trait = "0.1"
+futures = "0.3"
+backoff = { version = "0.4", features = ["tokio"] }
+dashmap = "6.1"
+anyhow = "1.0"
+clap = { version = "4.5", features = ["derive"] }
+reqwest = { version = "0.12", features = ["json"] }
+
+[dev-dependencies]
+tokio-test = "0.4"
+
+[[bin]]
+name = "polymarket-bot"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1

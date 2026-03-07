@@ -1,0 +1,75 @@
+version: '3.9'
+
+services:
+  # PostgreSQL database for bot state and trade history
+  postgres:
+    image: postgres:15-alpine
+    container_name: polymarket_postgres
+    environment:
+      POSTGRES_USER: polymarket_user
+      POSTGRES_PASSWORD: polymarket_pass
+      POSTGRES_DB: polymarket_bot
+    ports:
+      - "5434:5432"
+    volumes:
+      - polymarket_postgres_data:/var/lib/postgresql/data
+      - ./src/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U polymarket_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - polymarket_network
+
+  # Polymarket arbitrage bot
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: polymarket_bot
+    environment:
+      POLY_PRIVATE_KEY: ${POLY_PRIVATE_KEY}
+      WALLET_TYPE: ${WALLET_TYPE:-EOA}
+      POLY_CLOB_URL: https://clob.polymarket.com
+      POLY_GAMMA_URL: https://gamma-api.polymarket.com
+      POLY_DATA_URL: https://data-api.polymarket.com
+      POLY_WS_URL: wss://ws-subscriptions-clob.polymarket.com/ws/market
+      POLY_RPC_URL: https://polygon-rpc.com
+      POLY_CHAIN_ID: 137
+      DATABASE_URL: postgresql://polymarket_user:polymarket_pass@postgres:5432/polymarket_bot
+      DATABASE_POOL_SIZE: 10
+      PAPER_TRADING: "true"
+      RUST_LOG: info,polymarket_bot=debug
+      LOG_FILE: /app/logs/bot.log
+      MAX_POSITION_SIZE_USD: 1000
+      MAX_DAILY_EXPOSURE_USD: 20000
+      MAX_SLIPPAGE_TOLERANCE: 0.02
+      STOP_LOSS_THRESHOLD: -100
+      MIN_COMBINED_PRICE: 0.98
+      ARBITRAGE_BUFFER: 0.02
+      DEDUP_WINDOW_SECS: 5
+      ORDER_TIMEOUT_SECS: 5
+      HEARTBEAT_INTERVAL_SECS: 10
+      WEBSOCKET_RECONNECT_MAX_SECS: 30
+      MARKET_LIMIT: 100
+      SCAN_INTERVAL_MS: 500
+      MARKET_CATEGORY: ${MARKET_CATEGORY:-sports}
+      GAMMA_API_RPS: 2
+      CLOB_API_RPS: 10
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - polymarket_network
+    restart: unless-stopped
+
+volumes:
+  polymarket_postgres_data:
+    driver: local
+
+networks:
+  polymarket_network:
+    driver: bridge

@@ -1,0 +1,51 @@
+# Rust
+target/
+Cargo.lock
+**/*.rs.bk
+*.pdb
+
+# Environment & Secrets
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+
+# Logs
+logs/
+*.log
+*.log.*
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+postgres-data/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+.Spotlight-V100
+.Trashes
+
+# Docker
+docker-compose.override.yml
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
