@@ -345,25 +345,61 @@ impl PolymarketClient {
         side: OrderSide,
     ) -> Result<String> {
         if self.config.paper_trading {
-            info!("PAPER TRADING: Would place order {} {} @ {}", quantity, side.as_str(), price);
-            // Simulate fill
-            Ok(format!("PAPER_ORDER_{}", uuid::Uuid::new_v4()))
+            info!("PAPER TRADING: Would place order {} {} @ ${:.4} (token: {})", 
+                quantity, side.as_str(), price, token_id);
+            // Simulate 99% fill rate
+            let filled = rand::random::<f64>() < 0.99;
+            if filled {
+                Ok(format!("PAPER_ORDER_{}", uuid::Uuid::new_v4()))
+            } else {
+                Err(PolymarketBotError::OrderError("Paper trade simulated no fill".to_string()))
+            }
         } else {
             debug!("Placing {} order: token={}, qty={}, price={}",
                 side.as_str(), token_id, quantity, price);
 
-            // TODO: Implement using SDK's order builder
-            // client.limit_order()
-            //     .token_id(token_id)
-            //     .order_type(OrderType::FOK)
-            //     .price(price)
-            //     .size(quantity)
-            //     .side(side)
-            //     .build().await?
+            // Build order request for CLOB API
+            let order_payload = serde_json::json!({
+                "token_id": token_id,
+                "price": price.to_string(),
+                "size": quantity.to_string(),
+                "side": side.as_str(),
+                "order_type": "FOK",  // Fill-or-Kill
+            });
 
-            Err(PolymarketBotError::OrderError(
-                "Not yet implemented".to_string(),
-            ))
+            let url = format!("{}/order", self.config.poly_clob_url.trim_end_matches('/'));
+            
+            match self.http_client.post(&url)
+                .json(&order_payload)
+                .send()
+                .await
+            {
+                Ok(response) => {
+                    if response.status().is_success() {
+                        match response.json::<serde_json::Value>().await {
+                            Ok(data) => {
+                                let order_id = data.get("order_id")
+                                    .or_else(|| data.get("id"))
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("unknown")
+                                    .to_string();
+                                info!("✅ Order placed: {}", order_id);
+                                Ok(order_id)
+                            }
+                            Err(e) => Err(PolymarketBotError::OrderError(
+                                format!("Failed to parse order response: {}", e)
+                            ))
+                        }
+                    } else {
+                        Err(PolymarketBotError::OrderError(
+                            format!("Order rejected: HTTP {}", response.status())
+                        ))
+                    }
+                }
+                Err(e) => Err(PolymarketBotError::OrderError(
+                    format!("Order request failed: {}", e)
+                ))
+            }
         }
     }
 
@@ -375,23 +411,67 @@ impl PolymarketClient {
         } else {
             debug!("Cancelling order: {}", order_id);
 
-            // TODO: Implement using SDK
-            // client.cancel_order(order_id).await?
-
-            Err(PolymarketBotError::OrderError(
-                "Not yet implemented".to_string(),
-            ))
+            let url = format!("{}/order/{}", 
+                self.config.poly_clob_url.trim_end_matches('/'), 
+                order_id);
+            
+            match self.http_client.delete(&url).send().await {
+                Ok(response) => {
+                    if response.status().is_success() {
+                        info!("✅ Order cancelled: {}", order_id);
+                        Ok(())
+                    } else {
+                        Err(PolymarketBotError::OrderError(
+                            format!("Cancel failed: HTTP {}", response.status())
+                        ))
+                    }
+                }
+                Err(e) => Err(PolymarketBotError::OrderError(
+                    format!("Cancel request failed: {}", e)
+                ))
+            }
         }
     }
 
     /// Get user positions/balances
     pub async fn get_balance(&self) -> Result<f64> {
-        debug!("Fetching account balance");
+        if self.config.paper_trading {
+            // Return configured max position size for paper trading
+            Ok(self.config.max_position_size_usd * 10.0)
+        } else {
+            debug!("Fetching account balance");
 
-        // TODO: Implement using SDK
-        // This would query the user's collateral balance
-
-        Ok(0.0)
+            let url = format!("{}/balance", self.config.poly_clob_url.trim_end_matches('/'));
+            
+            match self.http_client.get(&url).send().await {
+                Ok(response) => {
+                    if response.status().is_success() {
+                        match response.json::<serde_json::Value>().await {
+                            Ok(data) => {
+                                let balance = data.get("balance")
+                                    .or_else(|| data.get("collateral"))
+                                    .and_then(|v| v.as_str())
+                                    .and_then(|s| s.parse::<f64>().ok())
+                                    .unwrap_or(0.0);
+                                debug!("Account balance: ${:.2}", balance);
+                                Ok(balance)
+                            }
+                            Err(e) => {
+                                warn!("Failed to parse balance: {}", e);
+                                Ok(0.0)
+                            }
+                        }
+                    } else {
+                        warn!("Balance request failed: HTTP {}", response.status());
+                        Ok(0.0)
+                    }
+                }
+                Err(e) => {
+                    warn!("Balance request error: {}", e);
+                    Ok(0.0)
+                }
+            }
+        }
     }
 }
 

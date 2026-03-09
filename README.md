@@ -1,24 +1,29 @@
-# Polymarket Arbitrage Bot
+# Polymarket Bot Template
 
-A high-performance Rust-based statistical arbitrage bot for Polymarket prediction markets. Exploits tiny pricing inefficiencies in binary outcome markets by buying both YES or both NO sides when combined cost < $0.99, capturing the guaranteed $1.00 payout spread.
+A high-performance Rust-based trading bot template for Polymarket prediction markets. Includes a complete arbitrage strategy implementation as a reference example.
 
-## Strategy
+## Example Strategy: Statistical Arbitrage
 
-The bot executes two types of arbitrage:
+The included example strategy detects pricing inefficiencies in binary outcome markets:
 
-1. **YES Arbitrage**: When `YES(A) + YES(B) < $0.99`
-   - Buy both YES sides
-   - One side wins and pays $1.00
-   - Pocket the spread
+**Arbitrage Detection**: When `Outcome_A_Price + Outcome_B_Price < $1.00`
+- Buy both outcomes simultaneously
+- One outcome resolves to $1.00, the other to $0.00
+- Theoretical profit = $1.00 - (Price_A + Price_B)
 
-2. **NO Arbitrage**: When `NO(A) + NO(B) < $0.99`
-   - Buy both NO sides (complementary to YES)
-   - Same payoff mechanics
+**Example Scenario**:
+- Market: "Will it rain tomorrow?"
+- YES price: $0.48
+- NO price: $0.49  
+- Combined: $0.97 < $1.00
+- Theoretical spread: $0.03 per $1.00 invested
 
-### Projected Performance
-- ~21 trades/day
-- 1-4¢ profit per trade
-- **Annualized: ~$619,000** (paper trading validated)
+**⚠️ DISCLAIMER**: This is an educational example. Real-world trading involves:
+- Slippage and execution delays
+- Gas fees and transaction costs
+- Market liquidity constraints
+- Competition from other traders
+- No guaranteed profits
 
 ## Architecture
 
@@ -30,10 +35,10 @@ src/
 ├── config.rs         # Configuration management
 ├── db/              # PostgreSQL integration
 ├── error.rs         # Error handling
-├── models/          # Data structures (Market, Order, ArbitrageOpportunity)
-├── strategy/        # Arbitrage detection & execution
-│   ├── scanner.rs   # Detect opportunities in real-time
-│   └── executor.rs  # Place orders simultaneously
+├── models/          # Data structures (Market, Order, Opportunity)
+├── strategy/        # Trading strategy implementation
+│   ├── scanner.rs   # Market scanning & opportunity detection
+│   └── executor.rs  # Order placement & execution
 ├── lib.rs           # Module exports
 └── main.rs          # Application entry point
 ```
@@ -43,13 +48,13 @@ src/
 ```
 WebSocket (Real-time Order Books)
     ↓
-Scanner (Detect Arbitrage < $0.98)
+Scanner (Detect Trading Opportunities)
     ↓
 Executor (Size Position & Place Orders)
     ↓
-Settlement (Wait for Market Resolution)
+Settlement (Track Fills & Log to Database)
     ↓
-Database (Log Trade History & P&L)
+Database (Trade History & P&L)
 ```
 
 ### Technology Stack
@@ -61,6 +66,21 @@ Database (Log Trade History & P&L)
 - **Logging**: Structured JSON logs via `tracing`
 - **WebSocket**: `tokio-tungstenite` (persistence, auto-reconnect)
 - **Deployment**: Docker & Docker Compose
+
+## Customizing the Strategy
+
+The arbitrage strategy in `src/strategy/` serves as a reference implementation. To build your own:
+
+1. **Modify `scanner.rs`**: Implement your market analysis logic
+2. **Modify `executor.rs`**: Customize order placement and position sizing
+3. **Update `models/`**: Add data structures for your strategy
+4. **Configure via `.env`**: Adjust thresholds and parameters
+
+**Example strategies you could implement**:
+- Market making (provide liquidity, capture spread)
+- Trend following (momentum-based trading)
+- Event-driven (news/social sentiment)
+- Portfolio rebalancing (maintain target allocations)
 
 ## Quick Start
 
@@ -124,9 +144,9 @@ See `.env.example` for all available configuration options:
 - `STOP_LOSS_THRESHOLD`: Pause on loss (-$100)
 
 ### Strategy
-- `MIN_COMBINED_PRICE`: Arb threshold (0.98)
-- `ARBITRAGE_BUFFER`: Price buffer (2%)
-- `DEDUP_WINDOW_SECS`: Duplicate prevention (5s)
+- `MIN_COMBINED_PRICE`: Arbitrage threshold (example: 0.98)
+- `ARBITRAGE_BUFFER`: Safety buffer percentage (example: 2%)
+- `DEDUP_WINDOW_SECS`: Duplicate opportunity prevention (default: 5s)
 
 ### Execution
 - `ORDER_TIMEOUT_SECS`: FOK order timeout (5s)
@@ -141,7 +161,7 @@ See `.env.example` for all available configuration options:
 | Table | Purpose |
 |-------|---------|
 | `markets` | Binary outcome market metadata & prices |
-| `opportunities` | Detected arbitrage opportunities |
+| `opportunities` | Detected trading opportunities |
 | `orders` | Placed orders (side A & side B) |
 | `settlements` | Resolved trades with P&L |
 | `trade_log` | Detailed execution history |
@@ -149,29 +169,29 @@ See `.env.example` for all available configuration options:
 ## Key Features
 
 ### Real-Time Detection
-- WebSocket subscription to `wss://ws-subscriptions-clob.polymarket.com/ws/market`
+- WebSocket subscription to Polymarket's CLOB orderbook feed
 - Processes `book`, `price_change`, `last_trade_price` messages
-- ~500ms scan interval for arbitrage detection
+- Configurable scan interval (default: 500ms)
 
 ### Simultaneous Execution
-- Places both order legs in parallel via `tokio::try_join!`
+- Places both order legs in parallel via async execution
 - Fill-or-Kill (FOK) orders prevent partial fills
-- 5-second timeout for synchronous execution
+- Configurable timeout for synchronous execution (default: 5s)
 
 ### Position Sizing
-- Calculates quantity based on prices for balanced cost split
-- Respects liquidity constraints from order book
-- Max position: $1000 USD per trade
+- Calculates quantity based on prices for balanced cost allocation
+- Respects liquidity constraints from order book depth
+- Configurable maximum position size per trade
 
 ### Persistent Connections
-- Single WebSocket for market data (heartbeat every 10s)
+- Single WebSocket connection for market data with heartbeat
 - HTTP connection pooling for order placement
-- Auto-reconnect with exponential backoff
+- Auto-reconnect with exponential backoff on disconnection
 
 ### Paper Trading
-- Full simulation mode without real orders
-- Realistic 99% fill rate assumption
-- Identical to live environment except order placement
+- Full simulation mode without placing real orders
+- Simulates realistic fill rates for validation
+- Identical to live environment for testing strategies
 
 ## Logging
 
@@ -181,10 +201,10 @@ Structured JSON logs to both stdout and `./logs/bot.log`:
 {
   "timestamp": "2026-02-21T12:34:56Z",
   "level": "INFO",
-  "message": "YES arbitrage detected",
-  "market_id_a": "0x123...",
-  "spread": 0.025,
-  "expected_profit_usd": 10.50
+  "message": "Arbitrage opportunity detected",
+  "market_id": "0x123...",
+  "combined_price": 0.975,
+  "spread": 0.025
 }
 ```
 
@@ -230,10 +250,10 @@ cargo test
 
 ## Performance Benchmarks
 
-- **Scan latency**: ~100-500ms (configurable)
-- **Order execution**: Both sides within 500ms
-- **Fill rate**: >95% in liquid markets
-- **Slippage**: <2% tolerance (strict enforcement)
+- **Scan latency**: Configurable (default: 100-500ms)
+- **Order execution**: Both sides placed concurrently
+- **Fill rate**: Depends on market liquidity and order size
+- **Slippage**: Configurable tolerance with strict enforcement
 
 ## Risk Warnings
 

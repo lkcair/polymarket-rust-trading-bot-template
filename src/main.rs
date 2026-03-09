@@ -72,10 +72,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     // Spawn settlement task
+    let pool_clone = pool.clone();
     let settlement_handle = tokio::spawn(async move {
-        // TODO: Implement settlement logic that consumes from rx_orders
-        // For now, just log received orders
+        let mut rx = rx_orders;
         info!("Settlement task started");
+        
+        while let Some(order) = rx.recv().await {
+            info!("Settlement: Processing order {} (paper: {})", order.id, order.paper_trade);
+            
+            // Log order to database
+            if let Err(e) = db::log_order(
+                &pool_clone,
+                &order.market_id_a,
+                &order.market_id_b,
+                order.quantity_a,
+                order.quantity_b,
+                order.price_a,
+                order.price_b,
+                order.cost_usd,
+                order.paper_trade,
+            ).await {
+                error!("Failed to log order to database: {}", e);
+            }
+            
+            info!("Order logged: cost=${:.2}, expected_profit=${:.2}", 
+                order.cost_usd, order.expected_profit());
+        }
     });
 
     // Wait for all tasks

@@ -82,16 +82,6 @@ CREATE TABLE IF NOT EXISTS trade_log (
     timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Credentials table: store API credentials
-CREATE TABLE IF NOT EXISTS credentials (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    api_key VARCHAR(255) UNIQUE,
-    api_secret VARCHAR(255),
-    passphrase VARCHAR(255),
-    expires_at TIMESTAMP WITH TIME ZONE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
 -- Create indexes for performance
 CREATE INDEX IF NOT EXISTS idx_opportunities_timestamp ON opportunities(timestamp);
 CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at);
