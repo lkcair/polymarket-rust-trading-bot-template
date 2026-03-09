@@ -300,8 +300,6 @@ docker-compose ps
 - [ ] Backtesting framework
 - [ ] Live trading performance tracking
 
-⚠️ DISCLAIMER: This software is for educational and research purposes only. Trading and investing involves substantial risk of loss. Use at your own risk.
-
 ## License
 
 MIT
@@ -315,4 +313,3 @@ For issues with the bot, check:
 4. Polymarket API status page
 
 For SDK issues, see: https://github.com/Polymarket/rs-clob-client
-
