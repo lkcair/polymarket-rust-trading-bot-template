@@ -94,65 +94,110 @@ The arbitrage strategy in `src/strategy/` serves as a reference implementation. 
 
 1. **Clone and configure**:
    ```bash
-   cd /root/polymarket
    cp .env.example .env
+   # Edit .env and set POLY_PRIVATE_KEY=0x...
    ```
 
-2. **Set environment variables in `.env`**:
-   ```bash
-   # Required: Your wallet private key (starts with 0x)
-   POLY_PRIVATE_KEY=0x...
-
-   # Optional: Paper trading (default: true)
-   PAPER_TRADING=true
-
-   # Risk Management
-   MAX_POSITION_SIZE_USD=1000
-   MAX_DAILY_EXPOSURE_USD=20000
-   MAX_SLIPPAGE_TOLERANCE=0.02
-   ```
-
-3. **Start the bot**:
+2. **Start the bot**:
    ```bash
    docker-compose up -d
    ```
 
-4. **Monitor logs**:
+3. **Monitor logs**:
    ```bash
    docker-compose logs -f bot
    ```
 
-5. **Verify database**:
-   ```bash
-   docker-compose exec postgres psql -U polymarket_user -d polymarket_bot
+### Bot Control Commands
 
-   -- View recent trades
-   SELECT * FROM orders ORDER BY created_at DESC LIMIT 10;
+Use the included control script (optional):
 
-   -- View cumulative P&L
-   SELECT SUM(profit_loss) FROM settlements;
-   ```
+```bash
+# Start bot
+./bot-control.sh start
+
+# Stop bot
+./bot-control.sh stop
+
+# Restart bot
+./bot-control.sh restart
+
+# View live logs (filtered)
+./bot-control.sh logs
+
+# View all logs
+./bot-control.sh logs-all
+
+# View only arbitrage opportunities
+./bot-control.sh logs-arb
+
+# Check bot status
+./bot-control.sh status
+
+# View statistics
+./bot-control.sh stats
+
+# Clean up (remove containers and volumes)
+./bot-control.sh clean
+```
+
+Or use docker-compose directly:
+
+```bash
+# Start
+docker-compose up -d
+
+# Stop
+docker-compose down
+
+# Restart
+docker-compose restart bot
+
+# Logs
+docker-compose logs -f bot
+
+# Status
+docker-compose ps
+```
+
+### Database Access
+
+```bash
+# Connect to PostgreSQL
+docker-compose exec postgres psql -U polymarket_user -d polymarket_bot
+
+# View recent trades
+SELECT * FROM orders ORDER BY created_at DESC LIMIT 10;
+
+# View cumulative P&L
+SELECT SUM(profit_loss) FROM settlements;
+
+# Exit
+\q
+```
 
 ## Configuration
 
-See `.env.example` for all available configuration options:
+Key environment variables in `.env`:
 
-### Risk Management
-- `MAX_POSITION_SIZE_USD`: Maximum per trade ($1000)
-- `MAX_DAILY_EXPOSURE_USD`: Daily limit ($20000)
-- `MAX_SLIPPAGE_TOLERANCE`: Acceptable slippage (2%)
-- `STOP_LOSS_THRESHOLD`: Pause on loss (-$100)
+**Risk Management**
+- `MAX_POSITION_SIZE_USD`: Maximum per trade (default: 1000)
+- `MAX_DAILY_EXPOSURE_USD`: Daily limit (default: 20000)
+- `MAX_SLIPPAGE_TOLERANCE`: Acceptable slippage (default: 0.02)
+- `STOP_LOSS_THRESHOLD`: Pause on loss (default: -100)
 
-### Strategy
+**Strategy Parameters**
 - `MIN_COMBINED_PRICE`: Arbitrage threshold (example: 0.98)
-- `ARBITRAGE_BUFFER`: Safety buffer percentage (example: 2%)
-- `DEDUP_WINDOW_SECS`: Duplicate opportunity prevention (default: 5s)
+- `ARBITRAGE_BUFFER`: Safety buffer percentage (example: 0.02)
+- `DEDUP_WINDOW_SECS`: Duplicate prevention (default: 5)
 
-### Execution
-- `ORDER_TIMEOUT_SECS`: FOK order timeout (5s)
-- `HEARTBEAT_INTERVAL_SECS`: WebSocket heartbeat (10s)
-- `MARKET_LIMIT`: Markets to scan per cycle (100)
-- `SCAN_INTERVAL_MS`: Scan frequency (500ms)
+**Execution Settings**
+- `ORDER_TIMEOUT_SECS`: FOK order timeout (default: 5)
+- `HEARTBEAT_INTERVAL_SECS`: WebSocket heartbeat (default: 10)
+- `MARKET_LIMIT`: Markets to scan per cycle (default: 100)
+- `SCAN_INTERVAL_MS`: Scan frequency (default: 500)
+
+See `.env.example` for all options.
 
 ## Database Schema
 
@@ -168,34 +213,15 @@ See `.env.example` for all available configuration options:
 
 ## Key Features
 
-### Real-Time Detection
-- WebSocket subscription to Polymarket's CLOB orderbook feed
-- Processes `book`, `price_change`, `last_trade_price` messages
-- Configurable scan interval (default: 500ms)
-
-### Simultaneous Execution
-- Places both order legs in parallel via async execution
-- Fill-or-Kill (FOK) orders prevent partial fills
-- Configurable timeout for synchronous execution (default: 5s)
-
-### Position Sizing
-- Calculates quantity based on prices for balanced cost allocation
-- Respects liquidity constraints from order book depth
-- Configurable maximum position size per trade
-
-### Persistent Connections
-- Single WebSocket connection for market data with heartbeat
-- HTTP connection pooling for order placement
-- Auto-reconnect with exponential backoff on disconnection
-
-### Paper Trading
-- Full simulation mode without placing real orders
-- Simulates realistic fill rates for validation
-- Identical to live environment for testing strategies
+- **Real-Time Detection**: WebSocket subscription to Polymarket's CLOB orderbook feed with configurable scan interval
+- **Simultaneous Execution**: Places both order legs in parallel via async execution with Fill-or-Kill (FOK) orders
+- **Position Sizing**: Calculates quantity based on prices for balanced cost allocation, respects liquidity constraints
+- **Persistent Connections**: Single WebSocket connection with heartbeat, HTTP connection pooling, auto-reconnect
+- **Paper Trading**: Full simulation mode without placing real orders, simulates realistic fill rates
 
 ## Logging
 
-Structured JSON logs to both stdout and `./logs/bot.log`:
+Structured JSON logs to stdout and `./logs/bot.log`:
 
 ```json
 {
@@ -208,47 +234,32 @@ Structured JSON logs to both stdout and `./logs/bot.log`:
 }
 ```
 
-### Log Levels
-- `ERROR`: Critical failures (API errors, insufficient balance)
-- `WARN`: Recoverable issues (slippage exceeded, timeout)
-- `INFO`: Important events (bot start, arbitrage found)
-- `DEBUG`: Detailed execution logs (order placement, fills)
+**Log Levels**: ERROR (critical failures), WARN (recoverable issues), INFO (important events), DEBUG (detailed execution)
 
 ## API Integration
 
-### Polymarket SDK
-The bot uses the official **`polymarket-client-sdk`** v0.3 with these features:
-
+Uses official **`polymarket-client-sdk`** v0.3:
 - **Authentication**: L1 (EIP-712 signing) → L2 (HMAC-SHA256)
 - **Market Data**: Gamma API for binary market listing
 - **Order Placement**: CLOB API with typed order builders
 - **WebSocket**: Real-time orderbook streaming
 
-### Endpoints
-- CLOB: `https://clob.polymarket.com`
-- Gamma: `https://gamma-api.polymarket.com`
-- Data: `https://data-api.polymarket.com`
-- WebSocket: `wss://ws-subscriptions-clob.polymarket.com/ws/market`
+**Endpoints**: CLOB (`clob.polymarket.com`), Gamma (`gamma-api.polymarket.com`), Data (`data-api.polymarket.com`), WebSocket (`ws-subscriptions-clob.polymarket.com`)
 
 ## Development
 
-### Build from source
 ```bash
-cd /root/polymarket
+# Build from source
 docker build -t polymarket-bot:latest .
-```
 
-### Run locally (requires Rust installed)
-```bash
+# Run locally (requires Rust 1.88+)
 cargo run --release
-```
 
-### Run tests
-```bash
+# Run tests
 cargo test
 ```
 
-## Performance Benchmarks
+## Performance
 
 - **Scan latency**: Configurable (default: 100-500ms)
 - **Order execution**: Both sides placed concurrently
@@ -262,43 +273,17 @@ cargo test
 1. Start with **paper trading** (`PAPER_TRADING=true`)
 2. Validate with small positions (`MAX_POSITION_SIZE_USD=100`)
 3. Monitor logs closely for errors
-4. Test on testnet first if available
-5. Never commit private keys to version control
+4. Never commit private keys to version control
 
 ## Troubleshooting
 
-### Bot won't start
-```bash
-docker-compose logs bot | tail -50
-# Check: DATABASE_URL, POLY_PRIVATE_KEY
-```
+**Bot won't start**: Check `docker-compose logs bot | tail -50` for DATABASE_URL and POLY_PRIVATE_KEY errors
 
-### Database connection error
-```bash
-docker-compose logs postgres
-# Ensure postgres service is healthy
-docker-compose ps
-```
+**Database connection error**: Verify postgres is healthy with `docker-compose ps`
 
-### No arbitrage opportunities found
-- Check `MARKET_LIMIT` (increase if too low)
-- Verify `MIN_COMBINED_PRICE` (0.98 is typical)
-- Check market liquidity on Polymarket website
+**No opportunities found**: Increase `MARKET_LIMIT` or verify `MIN_COMBINED_PRICE` threshold
 
-### Orders not filling
-- Enable paper trading first to validate
-- Check `MAX_SLIPPAGE_TOLERANCE` (try 0.04)
-- Verify sufficient balance in wallet
-
-## Future Enhancements
-
-- [ ] Multi-pair simultaneous execution
-- [ ] Advanced position sizing (Kelly criterion)
-- [ ] Custom market filters by tag/category
-- [ ] Real-time performance dashboard
-- [ ] Slack/Discord alerts
-- [ ] Backtesting framework
-- [ ] Live trading performance tracking
+**Orders not filling**: Enable paper trading first, check `MAX_SLIPPAGE_TOLERANCE`, verify wallet balance
 
 ## License
 
@@ -306,10 +291,6 @@ MIT
 
 ## Support
 
-For issues with the bot, check:
-1. `.env` configuration
-2. `./logs/bot.log` for error messages
-3. PostgreSQL tables for data integrity
-4. Polymarket API status page
+For issues: Check `.env` configuration, `./logs/bot.log`, PostgreSQL tables, or Polymarket API status
 
-For SDK issues, see: https://github.com/Polymarket/rs-clob-client
+For SDK issues: https://github.com/Polymarket/rs-clob-client
